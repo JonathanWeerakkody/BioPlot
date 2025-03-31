@@ -1,0 +1,129 @@
+.plot-builder {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.plot-builder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.plot-builder-title {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #202124;
+}
+
+.back-button {
+  background-color: transparent;
+  border: 1px solid #4285F4;
+  color: #4285F4;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+}
+
+.back-button:hover {
+  background-color: #f0f4ff;
+}
+
+.plot-builder-steps {
+  display: flex;
+  margin-bottom: 30px;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.step-tab {
+  padding: 15px 20px;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  color: #5f6368;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+}
+
+.step-tab.active {
+  border-bottom-color: #4285F4;
+  color: #4285F4;
+}
+
+.step-tab:hover:not(.active) {
+  background-color: #f8f9fa;
+}
+
+.step-content {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.step-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.step-button {
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.prev-button {
+  background-color: transparent;
+  border: 1px solid #5f6368;
+  color: #5f6368;
+}
+
+.prev-button:hover {
+  background-color: #f8f9fa;
+}
+
+.next-button {
+  background-color: #4285F4;
+  border: 1px solid #4285F4;
+  color: white;
+}
+
+.next-button:hover {
+  background-color: #3367d6;
+  border-color: #3367d6;
+}
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.disabled:hover {
+  background-color: inherit;
+  border-color: inherit;
+}
+
+@media (max-width: 768px) {
+  .plot-builder-steps {
+    flex-direction: column;
+  }
+  
+  .step-tab {
+    padding: 10px;
+  }
+  
+  .step-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .step-button {
+    width: 100%;
+  }
+}

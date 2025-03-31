@@ -1,0 +1,56 @@
+.data-input {
+  background-color: white;
+  border-radius: 8px;
+}
+
+.input-tabs {
+  display: flex;
+  margin-bottom: 20px;
+}
+
+.input-tabs button {
+  background-color: #f5f7fa;
+  color: #333;
+  border: none;
+  padding: 10px 20px;
+  margin-right: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.input-tabs button.active {
+  background-color: #4285F4;
+  color: white;
+}
+
+.input-content {
+  margin-bottom: 20px;
+}
+
+textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: monospace;
+  resize: vertical;
+}
+
+.input-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+}
+
+.primary-button {
+  background-color: #4285F4;
+  color: white;
+  font-weight: bold;
+}
+
+.note {
+  font-size: 14px;
+  color: #666;
+  font-style: italic;
+  margin-top: 10px;
+}

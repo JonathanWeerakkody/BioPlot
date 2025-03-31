@@ -77,10 +77,14 @@ export const getModulesFormat = () => {
   }));
 };
 
-export default {
+// Create a named export object
+const GraphRegistry = {
   GRAPH_TYPES,
   getAllGraphTypes,
   getGraphById,
   getGraphsByCategory,
   getModulesFormat
 };
+
+// Export the named object as default
+export default GraphRegistry;

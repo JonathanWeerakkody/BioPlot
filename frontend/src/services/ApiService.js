@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import axios from 'axios';
 
 // API base URL - change this based on environment
@@ -23,9 +22,9 @@ export const getModules = async () => {
   }
 };
 
-export const getSampleData = async (module, plotType) => {
+export const getSampleData = async (plotType) => {
   try {
-    const response = await apiClient.get(`/sample_data/${module}/${plotType}`);
+    const response = await apiClient.get(`/sample-data/${plotType}`);
     return response.data;
   } catch (error) {
     console.error(`Error fetching sample data for ${plotType}:`, error);
@@ -33,25 +32,12 @@ export const getSampleData = async (module, plotType) => {
   }
 };
 
-export const validateData = async (plotType, data) => {
+export const generatePlot = async (plotType, data, options) => {
   try {
-    const response = await apiClient.post('/validate_data', {
-      plot_type: plotType,
-      data: data
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error validating data:', error);
-    throw error;
-  }
-};
-
-export const generatePlot = async (plotType, data, params) => {
-  try {
-    const response = await apiClient.post('/generate_plot', {
-      plot_type: plotType,
-      data: data,
-      params: params
+    const response = await apiClient.post('/generate', {
+      plotType,
+      data,
+      options
     });
     return response.data;
   } catch (error) {
@@ -60,30 +46,15 @@ export const generatePlot = async (plotType, data, params) => {
   }
 };
 
-export const getPlotUrl = (filename) => {
-  return `${API_BASE_URL}/plots/${filename}`;
-};
-
-// Custom hook for API calls with loading and error states
-export const useApi = (apiFunction, initialData = null) => {
-  const [data, setData] = useState(initialData);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const execute = async (...args) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await apiFunction(...args);
-      setData(result);
-      return result;
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return { data, loading, error, execute };
+export const validateData = async (plotType, data) => {
+  try {
+    const response = await apiClient.post('/validate', {
+      plotType,
+      data
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error validating data:', error);
+    throw error;
+  }
 };

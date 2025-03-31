@@ -1,132 +1,89 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import Header from './components/Header';
-import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
-import PlotBuilder from './components/PlotBuilder';
-import About from './components/About';
-import ErrorBoundary from './components/ErrorBoundary';
-import LandingPage from './components/LandingPage';
-import GraphRegistryManager from './components/GraphRegistry';
+import Section from './components/Section';
+import DataLoader from './components/DataLoader';
+import ChartSelector from './components/ChartSelector';
+import ChartCustomizer from './components/ChartCustomizer';
+import ChartPreview from './components/ChartPreview';
+import Footer from './components/Footer';
+import { getModulesFormat } from './components/GraphRegistry';
 
 function App() {
-  const [activePage, setActivePage] = useState('dashboard');
-  const [activePlot, setActivePlot] = useState(null);
+  const [data, setData] = useState(null);
+  const [dataSource, setDataSource] = useState(null);
   const [modules, setModules] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
+  const [currentChart, setCurrentChart] = useState(null);
+  const [chartOptions, setChartOptions] = useState({});
+  const [generatedChart, setGeneratedChart] = useState(null);
+  
+  // Initialize modules from GraphRegistry
   useEffect(() => {
-    // Fetch modules from API
-    const fetchModules = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`${process.env.REACT_APP_API_URL || '/api'}/modules`);
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-        const data = await response.json();
-        setModules(data);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching modules:', err);
-        setError('Failed to load modules. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchModules();
+    const modulesData = getModulesFormat();
+    setModules(modulesData);
   }, []);
 
-  const handlePlotSelect = (moduleId, plotId) => {
-    const selectedModule = modules.find(m => m.id === moduleId);
-    if (selectedModule) {
-      const selectedPlot = selectedModule.plots.find(p => p.id === plotId);
-      if (selectedPlot) {
-        setActivePlot({
-          id: selectedPlot.id,
-          name: selectedPlot.name,
-          module: {
-            id: selectedModule.id,
-            name: selectedModule.name
-          }
-        });
-        setActivePage('plot-builder');
-      }
-    }
+  const handleDataLoaded = (loadedData, source) => {
+    setData(loadedData);
+    setDataSource(source);
   };
 
-  const handleNavigation = (page) => {
-    setActivePage(page);
-    if (page === 'dashboard') {
-      setActivePlot(null);
-    }
+  const handleChartSelect = (chart) => {
+    setCurrentChart(chart);
+    setChartOptions({}); // Reset options when chart changes
+    setGeneratedChart(null);
   };
 
-  const renderContent = () => {
-    switch (activePage) {
-      case 'dashboard':
-        return (
-          <ErrorBoundary>
-            <LandingPage 
-              modules={modules} 
-              loading={loading}
-              error={error}
-              onPlotSelect={handlePlotSelect}
-            />
-          </ErrorBoundary>
-        );
-      case 'plot-builder':
-        return (
-          <ErrorBoundary>
-            <PlotBuilder 
-              plot={activePlot}
-              onBack={() => handleNavigation('dashboard')}
-            />
-          </ErrorBoundary>
-        );
-      case 'about':
-        return (
-          <ErrorBoundary>
-            <About />
-          </ErrorBoundary>
-        );
-      case 'graph-registry':
-        return (
-          <ErrorBoundary>
-            <GraphRegistryManager />
-          </ErrorBoundary>
-        );
-      default:
-        return (
-          <ErrorBoundary>
-            <LandingPage 
-              modules={modules} 
-              loading={loading}
-              error={error}
-              onPlotSelect={handlePlotSelect}
-            />
-          </ErrorBoundary>
-        );
-    }
+  const handleOptionsChange = (newOptions) => {
+    setChartOptions(newOptions);
+  };
+
+  const handleChartGenerated = (chartData) => {
+    setGeneratedChart(chartData);
   };
 
   return (
-    <div className="app">
-      <Header onNavigation={handleNavigation} />
-      <div className="main-container">
-        <Sidebar 
-          modules={modules} 
-          loading={loading}
-          onPlotSelect={handlePlotSelect}
-          onNavigation={handleNavigation}
-          activePage={activePage}
-          activePlot={activePlot}
-        />
-        <main className="content">
-          {renderContent()}
-        </main>
+    <div className="App">
+      <Header />
+      <div className="app-sections">
+        <Section title="1. Load your data">
+          <DataLoader onDataLoaded={handleDataLoaded} />
+        </Section>
+        
+        {data && (
+          <Section title="2. Choose a chart">
+            <ChartSelector 
+              modules={modules} 
+              onSelectChart={handleChartSelect} 
+              currentChart={currentChart}
+            />
+          </Section>
+        )}
+        
+        {data && currentChart && (
+          <Section title="3. Customize">
+            <ChartCustomizer 
+              chart={currentChart} 
+              data={data}
+              options={chartOptions}
+              onOptionsChange={handleOptionsChange}
+            />
+          </Section>
+        )}
+        
+        {data && currentChart && (
+          <Section title="4. Preview & Export">
+            <ChartPreview 
+              chart={currentChart}
+              data={data}
+              options={chartOptions}
+              onChartGenerated={handleChartGenerated}
+              generatedChart={generatedChart}
+            />
+          </Section>
+        )}
+        
+        <Footer />
       </div>
     </div>
   );

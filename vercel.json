@@ -5,12 +5,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.py"
+      "destination": "/api"
     }
-  ],
-  "functions": {
-    "api/index.py": {
-      "runtime": "python@3.9"
-    }
-  }
+  ]
 }

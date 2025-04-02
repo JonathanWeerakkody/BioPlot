@@ -1,11 +1,8 @@
 {
   "version": 2,
-  "buildCommand": "npm install && npm run build",
-  "outputDirectory": "build",
+  "name": "bioplot-interactive-static",
+   "public": true, /* This setting indicates Vercel should serve the root directly */
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    }
+     { "source": "/(.*)", "destination": "/index.html" } /* Ensure SPA routing works if needed later */
   ]
 }

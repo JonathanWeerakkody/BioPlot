@@ -1,8 +1,6 @@
 {
   "version": 2,
-  "name": "bioplot-interactive-static",
-   "public": true, /* This setting indicates Vercel should serve the root directly */
   "rewrites": [
-     { "source": "/(.*)", "destination": "/index.html" } /* Ensure SPA routing works if needed later */
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

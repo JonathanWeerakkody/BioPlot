@@ -37,13 +37,13 @@ const plotDefinitions = {
     'volcano': {
         title: 'Volcano Plot',
         description: 'Visualize differential expression results. Required columns depend on settings, typically Fold Change and P-value.',
-        modulePath: './plots/volcano.js',
+        modulePath: '/js/plots/volcano.js',
         exampleFile: 'data/example_volcano.csv'
     },
     'heatmap': {
          title: 'Cluster Heatmap',
          description: 'Visualize matrix data. First column can optionally be used for row labels (specify in controls). Supports clustering and scaling.',
-        modulePath: './plots/heatmap.js',
+        modulePath: '/js/plots/heatmap.js',
         exampleFile: 'data/example_heatmap.csv'
     }
 };

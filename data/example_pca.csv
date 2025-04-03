@@ -1,0 +1,10 @@
+SampleID,Group,Feature1,Feature2,Feature3,Feature4,Feature5
+Sample1,Control,1.2,3.4,5.6,2.1,4.5
+Sample2,Control,1.5,3.1,5.9,2.5,4.1
+Sample3,Control,1.0,3.5,5.2,1.9,4.8
+Sample4,TreatmentA,5.5,2.0,1.1,6.0,0.5
+Sample5,TreatmentA,5.9,1.8,1.5,6.5,0.9
+Sample6,TreatmentA,5.2,2.2,1.0,5.8,0.7
+Sample7,TreatmentB,3.0,4.0,3.5,3.2,3.8
+Sample8,TreatmentB,3.3,3.8,3.9,3.5,3.5
+Sample9,TreatmentB,2.8,4.2,3.1,2.9,4.0

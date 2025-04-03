@@ -6,68 +6,51 @@ function parseDelimitedText(text, filename) {
         return { error: "File must have at least a header and one data row." };
     }
 
-    // Robust delimiter detection (prioritize known extensions, then check content)
-    let delimiter = ','; // Default to CSV
+    // Robust delimiter detection
+    let delimiter = ',';
     if (filename) {
         const lowerFilename = filename.toLowerCase();
         if (lowerFilename.endsWith('.tsv') || lowerFilename.endsWith('.txt')) {
             delimiter = '\t';
         }
     }
-    // Content check if delimiter not set by extension (simple check on header)
     if (delimiter === ',' && lines[0].includes('\t') && !lines[0].includes(',')){
          delimiter = '\t';
     } else if (delimiter === ',' && lines[0].includes(';') && !lines[0].includes(',')){
         delimiter = ';';
     }
 
-    // Improved Header Parsing: Handles quotes and delimiter within quotes very basically
+    // Header Parsing
     const parseHeader = (line, del) => {
-        // Very simplified CSV/TSV split - use PapaParse for full robustness
-        return line.split(del).map(h => h.trim().replace(/^["'](.*)["']$/, '$1')); // Remove start/end quotes
+        return line.split(del).map(h => h.trim().replace(/^["'](.*)["']$/, '$1'));
     };
-
     let header = parseHeader(lines[0], delimiter);
-
-     // Check for Byte Order Mark (BOM) commonly found in UTF-8 files from Windows
-     if (header.length > 0 && header[0].charCodeAt(0) === 0xFEFF) {
-         header[0] = header[0].slice(1); // Remove BOM
+     if (header.length > 0 && header[0].charCodeAt(0) === 0xFEFF) { // Check for BOM
+         header[0] = header[0].slice(1);
      }
-
-
     if (header.length === 0 || header.every(h => h === '')) {
        return { error: "Could not parse header row. Check delimiter and file format." };
     }
 
+    // Data Parsing
     const data = [];
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
-        // Simple split, does NOT handle delimiters inside quoted fields correctly.
-        // For robust parsing, consider using PapaParse: https://www.papaparse.com/
         const values = line.split(delimiter).map(v => v.trim().replace(/^["'](.*)["']$/, '$1'));
-
-        // Be lenient if the number of values doesn't match header (e.g., trailing empty cells)
-        // if (values.length !== header.length) {
-        //    console.warn(`Row ${i+1} has ${values.length} values, header has ${header.length}. Proceeding cautiously.`);
-        //    // You might want to pad values with empty strings or nulls, or discard the row
-        // }
-
         const rowObject = {};
         header.forEach((key, index) => {
-            // Ensure key is valid if values were shorter/longer than header
             if(key && index < values.length) {
                  let value = values[index];
-                 // Attempt numeric conversion if not explicitly empty/null string
                  const numValue = parseFloat(value);
                  if (value !== null && value.trim() !== '' && !isNaN(numValue)) {
                      rowObject[key] = numValue;
                 } else {
-                    rowObject[key] = value; // Keep as string otherwise
+                    rowObject[key] = value;
                 }
             } else if (key) {
-                 rowObject[key] = null; // Pad missing values
+                 rowObject[key] = null; // Pad missing
              }
         });
         data.push(rowObject);
@@ -80,44 +63,72 @@ function parseDelimitedText(text, filename) {
     console.log("Parsed Header:", header);
     console.log(`Parsed ${data.length} data rows.`);
     return { data: data, header: header };
-}
+} // End of parseDelimitedText
 
 function displayError(message, elementId = 'error-message') {
+    // IMPORTANT: This function relies on appState being globally accessible (defined in main.js)
+    // Ensure utils.js is loaded AFTER main.js OR restructure to pass appState.
     const errorDiv = document.getElementById(elementId);
     if (!errorDiv) return;
+
     errorDiv.textContent = message;
     errorDiv.classList.remove('d-none');
-    // Ensure plot area reflects the error state
+
     document.getElementById('plot-placeholder')?.classList.add('d-none');
     document.getElementById('loading-indicator')?.style.display = 'none';
-    document.getElementById('plot-output').innerHTML = ''; // Clear plot
-    appState.plotlyInitialized = false; // Reset Plotly flag
-}
+    const plotOutput = document.getElementById('plot-output');
+    if (plotOutput) plotOutput.innerHTML = '';
+
+    // Check if appState is defined before trying to access its properties
+    if (typeof appState !== 'undefined') {
+       appState.plotlyInitialized = false; // This assignment is correct
+    } else {
+       console.warn("appState not accessible in displayError function. Check script load order or structure.");
+    }
+} // End of displayError
 
 function clearError(elementId = 'error-message') {
     const errorDiv = document.getElementById(elementId);
     if (!errorDiv) return;
     errorDiv.classList.add('d-none');
     errorDiv.textContent = '';
-}
+} // End of clearError
 
+
+// Check this function carefully, especially around line 92 in YOUR file
 function setLoading(isLoading) {
     const loader = document.getElementById('loading-indicator');
     const plotOutput = document.getElementById('plot-output');
     const plotPlaceholder = document.getElementById('plot-placeholder');
-    if (!loader || !plotOutput || !plotPlaceholder) return;
+    // Ensure elements exist before proceeding
+    if (!loader || !plotOutput || !plotPlaceholder) {
+       console.warn("Missing required elements for setLoading (loader, plotOutput, or plotPlaceholder)");
+       return;
+    }
 
     if (isLoading) {
-        loader.style.display = 'flex'; // Use flex to ensure spinner centering works
-        plotOutput.style.opacity = '0.3'; // More pronounced dimming
+        loader.style.display = 'flex';
+        plotOutput.style.opacity = '0.3';
         plotPlaceholder.classList.add('d-none');
-        clearError(); // Clear previous errors when starting loading
+        clearError(); // Assumes clearError is defined
     } else {
         loader.style.display = 'none';
         plotOutput.style.opacity = '1';
-         // Only show placeholder if there's actually no plot yet
-         if (!appState.plotlyInitialized) {
-             plotPlaceholder.classList.remove('d-none');
+
+        // Only show placeholder if there's actually no plot yet
+        // IMPORTANT: This also relies on appState being accessible
+        let isInitialized = false;
+         if (typeof appState !== 'undefined') {
+            isInitialized = appState.plotlyInitialized;
+         } else {
+             console.warn("appState not accessible in setLoading function. Check script load order or structure.");
+             // Default to assuming not initialized if appState is unavailable
          }
+
+         // Check around this 'if' statement (approx line 92) in your file:
+         // Did you accidentally write "if (!appState.plotlyInitialized = something)"?
+        if (!isInitialized) {
+            plotPlaceholder.classList.remove('d-none');
+        }
     }
-}
+} // End of setLoading

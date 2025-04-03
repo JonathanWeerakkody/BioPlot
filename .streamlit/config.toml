@@ -1,0 +1,10 @@
+[theme]
+# Example modern theme - Adjust colors as desired!
+primaryColor="#636EFA"  # A vibrant blue/purple
+backgroundColor="#FFFFFF" # Clean white background
+secondaryBackgroundColor="#F0F2F6" # Light grey for sidebar, expanders, tabs
+textColor="#262730" # Dark grey/black text for readability
+font="sans serif" # Clean sans-serif font
+
+# You can also set base="dark" for a dark theme
+# base = "light"

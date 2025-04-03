@@ -1,5 +1,8 @@
 // js/main.js
 
+// Import the parser function specifically
+import { parseDelimitedText } from './utils.js'; // Assuming utils.js is in the same folder
+
 // Application State
 const appState = {
     currentPlotType: null,
@@ -37,30 +40,84 @@ const plotDefinitions = {
     'volcano': {
         title: 'Volcano Plot',
         description: 'Visualize differential expression results. Required columns depend on settings, typically Fold Change and P-value.',
-        modulePath: './plots/volcano.js',
+        modulePath: './plots/volcano.js', // Relative path for dynamic import
         exampleFile: 'data/example_volcano.csv'
     },
     'heatmap': {
          title: 'Cluster Heatmap',
          description: 'Visualize matrix data. First column can optionally be used for row labels (specify in controls). Supports clustering and scaling.',
-        modulePath: './plots/heatmap.js',
+        modulePath: './plots/heatmap.js', // Relative path for dynamic import
         exampleFile: 'data/example_heatmap.csv'
     }
 };
 
-// --- Event Listeners ---
+// --- MOVED Utility Functions (Depend on appState / DOM structure) ---
+
+function displayError(message, elementId = 'error-message') {
+    const errorDiv = document.getElementById(elementId);
+    if (!errorDiv) {
+        console.error("Error display element not found:", elementId);
+        return;
+    }
+    errorDiv.textContent = message;
+    errorDiv.classList.remove('d-none');
+
+    // Reset plot area on error
+    document.getElementById('plot-placeholder')?.classList.add('d-none');
+    document.getElementById('loading-indicator')?.style.display = 'none';
+    if (plotOutput) plotOutput.innerHTML = ''; // Clear plot
+    appState.plotlyInitialized = false; // Reset Plotly flag is essential here
+}
+
+function clearError(elementId = 'error-message') {
+    const errorDiv = document.getElementById(elementId);
+    if (errorDiv) {
+        errorDiv.classList.add('d-none');
+        errorDiv.textContent = '';
+    }
+}
+
+function setLoading(isLoading) {
+    // Check if elements exist every time
+    const loader = document.getElementById('loading-indicator');
+    const plotOutput = document.getElementById('plot-output');
+    const plotPlaceholder = document.getElementById('plot-placeholder');
+
+    if (!loader || !plotOutput || !plotPlaceholder) {
+       // This might happen transiently during page load/setup. Only warn if persists.
+       // console.warn("Missing required elements for setLoading");
+       return;
+    }
+
+    if (isLoading) {
+        loader.style.display = 'flex';
+        plotOutput.style.opacity = '0.3';
+        plotPlaceholder.classList.add('d-none');
+        clearError();
+    } else {
+        loader.style.display = 'none';
+        plotOutput.style.opacity = '1';
+        // Show placeholder only if plot is NOT already rendered
+        if (!appState.plotlyInitialized) {
+             plotPlaceholder.classList.remove('d-none');
+         }
+    }
+}
+
+
+// --- Event Listeners --- (Keep as before)
 plotCards.forEach(card => {
     card.addEventListener('click', () => {
         const plotType = card.dataset.plotType;
         if (plotDefinitions[plotType]) {
-            appState.currentPlotType = plotType;
-            switchToPlotGenerationView(plotType);
+           // No change here - this triggers the load and setup
+           switchToPlotGenerationView(plotType);
         } else {
             console.error("Selected plot type definition not found:", plotType);
         }
     });
 });
-
+// ... (Keep other event listeners: backButton, fileUpload, dynamicControlsContainer, download buttons) ...
 backButton.addEventListener('click', () => {
     switchToSelectionView();
 });
@@ -72,10 +129,14 @@ dynamicControlsContainer.addEventListener('change', handleControlChange); // For
 
 downloadPngBtn.addEventListener('click', () => handleDownload('png'));
 downloadSvgBtn.addEventListener('click', () => handleDownload('svg'));
-downloadTiffBtn.addEventListener('click', () => handleDownload('tiff')); // Will trigger PNG with warning
+downloadTiffBtn.addEventListener('click', () => handleDownload('tiff'));
 
+// --- Rest of main.js ---
+// Keep capitalize, updateExampleLink, switchToPlotGenerationView, switchToSelectionView,
+// handleFileUpload (it correctly calls the imported parseDelimitedText),
+// autoDetectColumnsIfNeeded, autoDetectColumn, handleControlChange, syncConfigFromControls,
+// updatePlot, handleDownload, resetPlotArea (it now correctly calls setLoading/clearError/displayError)
 
-// --- Utility Functions ---
 function capitalize(str) {
     if (!str) return '';
     return str.charAt(0).toUpperCase() + str.slice(1);
@@ -99,84 +160,106 @@ function updateExampleLink(plotType) {
     }
  }
 
-// --- Core Application Functions ---
-async function switchToPlotGenerationView(plotType) {
+
+ async function switchToPlotGenerationView(plotType) {
     const definition = plotDefinitions[plotType];
     if (!definition) return;
 
-    resetPlotArea();
-    fileUpload.value = '';
-    parseStatus.textContent = '';
-    appState.currentPlotType = plotType; // Set plot type early
-    updateExampleLink(plotType);
+    // Clear previous state BEFORE potentially failing import/setup
+    switchToSelectionView(); // Clears most things and hides plot gen section
 
-    setLoading(true);
-    plotGenerationSection.classList.add('d-none');
+    appState.currentPlotType = plotType; // Set current plot type
+    updateExampleLink(plotType);
+    plotTitleElement.textContent = definition.title; // Set title/desc early
+    plotDescriptionElement.textContent = definition.description;
+
+    setLoading(true); // Show loading
 
     try {
+        // Dynamic import MUST use a relative path from *this* file (main.js)
         const plotModule = await import(definition.modulePath);
         appState.currentPlotModule = plotModule;
 
         const defaults = plotModule[`${plotType}PlotDefaults`];
-        if (!defaults) throw new Error(`Defaults object not found in module for ${plotType}`);
+        if (!defaults) throw new Error(`Defaults object not found`);
         appState.plotConfig = { ...defaults };
 
         const controlsHTMLFunction = plotModule[`get${capitalize(plotType)}PlotControlsHTML`];
-        if (!controlsHTMLFunction) throw new Error(`Controls function not found in module for ${plotType}`);
+        if (!controlsHTMLFunction) throw new Error(`Controls function not found`);
 
         dynamicControlsContainer.innerHTML = controlsHTMLFunction(defaults);
 
-        // Apply accordion effect to NEWLY added controls
+        // Re-initialize accordions as the content is replaced
         ['collapseData', 'collapseCustomize', 'collapseDownload'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) new bootstrap.Collapse(el); // Initialize if element exists
+             const el = document.getElementById(id);
+            // Remove existing instance if present before creating new
+            const existingCollapse = bootstrap.Collapse.getInstance(el);
+            if(existingCollapse) existingCollapse.dispose();
+            if (el) new bootstrap.Collapse(el);
         });
 
-        syncConfigFromControls(); // Ensure state matches default controls values initially
 
+        // Sync state AGAIN now that controls physically exist
+        syncConfigFromControls();
+
+        // Attach specific listeners (like range slider label updates)
         const eventListenerFunction = plotModule[`add${capitalize(plotType)}EventListeners`];
         if (eventListenerFunction) {
-            eventListenerFunction(); // Attach dynamic listeners (e.g., for sliders, checkboxes affecting other controls)
+            eventListenerFunction(); // Attach dynamic listeners
         }
 
-        plotSelectionSection.classList.add('d-none');
-        plotGenerationSection.classList.remove('d-none');
+        plotSelectionSection.classList.add('d-none'); // Hide selection
+        plotGenerationSection.classList.remove('d-none'); // Show generation
 
-        // Optionally open the Customize accordion by default
-         const customizeCollapseEl = document.getElementById('collapseCustomize');
-        if (customizeCollapseEl) {
-            const bsCollapse = bootstrap.Collapse.getInstance(customizeCollapseEl) || new bootstrap.Collapse(customizeCollapseEl);
-             bsCollapse.show();
-         }
+        // Optionally show Customize accordion
+        const customizeCollapseEl = document.getElementById('collapseCustomize');
+         if (customizeCollapseEl) {
+           const bsCollapse = bootstrap.Collapse.getInstance(customizeCollapseEl) || new bootstrap.Collapse(customizeCollapseEl);
+            bsCollapse.show();
+        }
+        // Make sure plot area starts with placeholder showing correctly
+        resetPlotArea();
 
 
     } catch (error) {
         console.error(`Error loading/initializing plot module ${plotType}:`, error);
-        displayError(`Failed to load plot module: ${error.message}. Please check console.`);
-        switchToSelectionView();
+        displayError(`Failed to load plot module '${definition.title}': ${error.message}. Check console.`);
+        switchToSelectionView(); // Revert fully on error
     } finally {
-        setLoading(false);
+        setLoading(false); // Always turn off loader
     }
 }
 
 function switchToSelectionView() {
+    // Clear state BEFORE hiding elements etc.
     appState.currentPlotType = null;
     appState.plotData = null;
     appState.plotConfig = {};
     appState.currentPlotModule = null;
-    resetPlotArea();
-    dynamicControlsContainer.innerHTML = ''; // Clear old controls
+    appState.plotlyInitialized = false; // Ensure this is reset
 
-    plotGenerationSection.classList.add('d-none');
-    plotSelectionSection.classList.remove('d-none');
+    if(dynamicControlsContainer) dynamicControlsContainer.innerHTML = '';
+    if(fileUpload) fileUpload.value = ''; // Clear file input
+    if(parseStatus) parseStatus.textContent = ''; // Clear parse status
+    if(plotTitleElement) plotTitleElement.textContent = ''; // Clear plot title
+    if(plotDescriptionElement) plotDescriptionElement.textContent = ''; // Clear description
+
+    // Reset plot display area LAST
+    resetPlotArea(); // This will show placeholder and hide errors/loading
+
+    // Hide generation, show selection
+    plotGenerationSection?.classList.add('d-none');
+    plotSelectionSection?.classList.remove('d-none');
     updateExampleLink(null);
 }
 
+
 function handleFileUpload(event) {
     const file = event.target.files[0];
-    if (!file) {
+    if (!file || !appState.currentPlotType) { // Also check if a plot type is selected
+        if(!appState.currentPlotType && file) alert("Please select a plot type before uploading data.");
         parseStatus.textContent = '';
-        resetPlotArea();
+        resetPlotArea(); // Clear plot if file is removed or no plot type selected
         appState.plotData = null;
         appState.plotHeader = [];
         return;
@@ -189,6 +272,7 @@ function handleFileUpload(event) {
     const reader = new FileReader();
     reader.onload = function (e) {
         try {
+             // Use the imported parser function
             const result = parseDelimitedText(e.target.result, file.name);
             if (result.error) throw new Error(result.error);
 
@@ -198,8 +282,8 @@ function handleFileUpload(event) {
             parseStatus.classList.remove('text-danger');
             parseStatus.classList.add('text-success');
 
-            autoDetectColumnsIfNeeded(); // Auto-detect after successful parse
-            updatePlot(); // Plot with defaults/detected settings
+            autoDetectColumnsIfNeeded();
+            updatePlot(); // This implicitly calls syncConfigFromControls first
         } catch (err) {
             console.error("Parsing/Processing Error:", err);
             parseStatus.textContent = `Error: ${err.message}`;
@@ -224,8 +308,9 @@ function handleFileUpload(event) {
     reader.readAsText(file);
 }
 
+
 function autoDetectColumnsIfNeeded() {
-     if (!appState.currentPlotType || !appState.plotHeader || appState.plotHeader.length === 0) return;
+     if (!appState.currentPlotType || !appState.plotHeader || appState.plotHeader.length === 0 || !appState.plotData || appState.plotData.length === 0) return;
 
      const syncUpdate = (elem) => { if (elem) handleControlChange({ target: elem }); };
 
@@ -234,175 +319,181 @@ function autoDetectColumnsIfNeeded() {
          syncUpdate(autoDetectColumn(['padj', 'adj.p.val', 'fdr', 'pvalue', 'p.value'], 'volcano-pval-col'));
          syncUpdate(autoDetectColumn(['gene', 'gene_name', 'symbol', 'id'], 'volcano-gene-col'));
      } else if (appState.currentPlotType === 'heatmap') {
-         // Attempt to guess first non-numeric *looking* column as potential label
-         let firstLikelyLabel = appState.plotHeader.find(h => isNaN(parseFloat(appState.plotData[0]?.[h])));
-         syncUpdate(autoDetectColumn(['gene', 'symbol', 'id', 'name', firstLikelyLabel || ''], 'heatmap-row-label-col', true)); // Allow blank
+         // Only suggest if default 'sample' or common alternatives aren't the actual first column name
+         const currentLabelCol = document.getElementById('heatmap-row-label-col')?.value || '';
+         const firstHeader = appState.plotHeader[0];
+         if (!labelColFoundInHeader(currentLabelCol) && firstHeader && isNaN(parseFloat(appState.plotData[0]?.[firstHeader])) ) {
+            syncUpdate(autoDetectColumn([firstHeader], 'heatmap-row-label-col', true)); // Suggest first header if it looks like labels
+         } else {
+            // Ensure the current default or user setting is valid or use common fallbacks
+             syncUpdate(autoDetectColumn(['sample','gene', 'symbol', 'id', 'name'], 'heatmap-row-label-col', true));
+         }
     }
  }
 
-function autoDetectColumn(possibleNames, inputElementId, allowBlank = false) {
+function labelColFoundInHeader(colName){
+    if(!colName || !appState.plotHeader || appState.plotHeader.length === 0) return false;
+    return appState.plotHeader.map(h => h.toLowerCase()).includes(colName.toLowerCase());
+}
+
+ function autoDetectColumn(possibleNames, inputElementId, allowBlank = false) {
     const inputElement = document.getElementById(inputElementId);
     if (!inputElement || !appState.plotHeader) return null;
 
+    const currentValLower = inputElement.value.toLowerCase();
+    // If user has already entered a valid column, don't override it.
+     if (inputElement.value !== '' && appState.plotHeader.map(h => h.toLowerCase()).includes(currentValLower)) {
+       // console.log(`Keeping existing valid value "${inputElement.value}" for ${inputElementId}`);
+       return null; // No change needed
+    }
+
+
     const headerLower = appState.plotHeader.map(h => h.toLowerCase());
-    const possibleLower = possibleNames.map(p => p.toLowerCase());
+    const possibleLower = possibleNames.map(p => typeof p === 'string' ? p.toLowerCase() : '').filter(p=>p); // Filter empty possibles
 
     for (const possible of possibleLower) {
         const index = headerLower.indexOf(possible);
         if (index !== -1) {
+            console.log(`Auto-detected "${appState.plotHeader[index]}" for ${inputElementId}`);
             inputElement.value = appState.plotHeader[index];
-            return inputElement; // Return the element that was updated
+            return inputElement;
         }
     }
-    // Only set to blank if allowed AND it wasn't found AND its current value isn't already blank
-    if (allowBlank && inputElement.value !== '') {
-       inputElement.value = '';
-        return inputElement;
+     if (allowBlank) { // If no match found and blank is okay, ensure it's blank
+         if(inputElement.value !== '') {
+             inputElement.value = '';
+             console.log(`Setting ${inputElementId} to blank as no match found.`);
+            return inputElement;
+        }
+    } else if (inputElement.value === '') { // If not allowed blank and it's currently blank, try first header? Or default? Use default.
+         const defaults = appState.currentPlotModule?.[`${appState.currentPlotType}PlotDefaults`] || {};
+         const defaultVal = defaults[inputElement.id.replace(`${appState.currentPlotType}-`, '')] || '';
+         if(defaultVal && appState.plotHeader.map(h=>h.toLowerCase()).includes(defaultVal.toLowerCase())){
+              inputElement.value = defaultVal;
+              console.log(`Setting ${inputElementId} to default "${defaultVal}" as no match found and blank not allowed.`);
+             return inputElement;
+         }
     }
-    return null; // Return null if no change made
+    return null;
 }
+
 
 function handleControlChange(event) {
     if (!event.target || !appState.currentPlotType) return;
-
     const element = event.target;
 
-    // Handle linked label updates (sliders, etc.) if the specific listener isn't sufficient
-     if (element.type === 'range') {
+    // --- Immediate UI Updates (e.g., slider labels) ---
+    if (element.type === 'range') {
         const labelId = `${element.id}-label`;
-         const labelElement = document.getElementById(labelId);
-         if (labelElement) {
-             labelElement.textContent = element.id.includes('alpha') ? parseFloat(element.value).toFixed(2) : element.value;
-         }
-     }
-
-     // Special handling for enabling/disabling based on other controls
-    if (element.id === 'heatmap-cluster-rows' || element.id === 'heatmap-cluster-cols') {
-       document.getElementById('heatmap-cluster-method').disabled = !(document.getElementById('heatmap-cluster-rows').checked || document.getElementById('heatmap-cluster-cols').checked);
-       document.getElementById('heatmap-distance-method').disabled = !(document.getElementById('heatmap-cluster-rows').checked || document.getElementById('heatmap-cluster-cols').checked);
-     }
-     if (element.id === 'heatmap-show-numbers') {
-        document.getElementById('heatmap-number-fontsize').disabled = !element.checked;
+        const labelElement = document.getElementById(labelId);
+        if (labelElement) {
+            labelElement.textContent = element.id.includes('alpha') ? parseFloat(element.value).toFixed(2) : element.value;
+        }
     }
 
-    // Debounce the actual plot update
+    // --- Dynamic Control Enabling/Disabling ---
+    if(appState.currentPlotType === 'heatmap') {
+       const rowCheck = document.getElementById('heatmap-cluster-rows');
+       const colCheck = document.getElementById('heatmap-cluster-cols');
+       const showNumCheck = document.getElementById('heatmap-show-numbers');
+       const clusterMethod = document.getElementById('heatmap-cluster-method');
+       const distMethod = document.getElementById('heatmap-distance-method');
+       const numFont = document.getElementById('heatmap-number-fontsize');
+
+        if (element.id === rowCheck?.id || element.id === colCheck?.id) {
+           const clusterEnabled = rowCheck?.checked || colCheck?.checked;
+           if(clusterMethod) clusterMethod.disabled = !clusterEnabled;
+           if(distMethod) distMethod.disabled = !clusterEnabled;
+        }
+        if (element.id === showNumCheck?.id) {
+           if(numFont) numFont.disabled = !element.checked;
+       }
+   }
+
+    // Debounce Plot Update
     clearTimeout(appState.debounceTimer);
     appState.debounceTimer = setTimeout(() => {
         updatePlot();
-    }, 250); // 250ms delay
+    }, 300); // Slightly increased delay
 }
-
-function syncConfigFromControls() { // Ensure this runs before plotting!
-    if (!appState.currentPlotType || !appState.currentPlotModule || !dynamicControlsContainer) return false;
-
-    const inputs = dynamicControlsContainer.querySelectorAll('input, select, textarea');
-    const defaults = appState.currentPlotModule[`${appState.currentPlotType}PlotDefaults`] || {};
-    let changed = false;
-
-    inputs.forEach(element => {
-        if (!element.id || element.disabled) return;
-
-        const configKey = element.id.replace(`${appState.currentPlotType}-`, '');
-        let value;
-        let isNullAllowed = ['xMin', 'xMax', 'yMax', 'zMin', 'zMax'].includes(configKey); // Allow null for range overrides
-
-        if (element.type === 'checkbox') {
-            value = element.checked;
-        } else if (element.type === 'range') {
-            value = parseFloat(element.value);
-        } else if (element.type === 'number') {
-            value = (element.value === '' && isNullAllowed) ? null : parseFloat(element.value);
-            if (isNaN(value) && !isNullAllowed) {
-                value = defaults[configKey] ?? undefined; // Use default if invalid & null not allowed
-                console.warn(`Invalid number for ${configKey}. Using default.`);
-            } else if (isNaN(value) && isNullAllowed) {
-                value = null;
-            }
-        } else { // text, select, color, textarea
-            value = element.value;
-        }
-
-        // Track if any value actually changed compared to current appState
-        // Use loose equality (==) for comparison unless specific types need strict (===)
-        if (appState.plotConfig[configKey] != value && !(isNaN(appState.plotConfig[configKey]) && isNaN(value)) ) {
-           changed = true;
-        }
-        appState.plotConfig[configKey] = value;
-    });
-     // console.log("Sync Complete. Config:", appState.plotConfig, "Changed:", changed);
-     return changed;
-}
-
 
 function updatePlot() {
+    // Check essential conditions first
     if (!appState.plotData || !appState.currentPlotType || !appState.currentPlotModule) {
-        resetPlotArea(); // Show placeholder if data/module missing
-        return;
-    }
+        console.log("UpdatePlot cancelled: Missing data, plot type, or module.");
+        // Ensure placeholder is shown if nothing can be plotted
+         resetPlotArea();
+         return;
+     }
 
-     syncConfigFromControls(); // Make SURE config is up-to-date with UI just before plotting
+     // Update appState.plotConfig from UI controls
+     syncConfigFromControls();
 
     setLoading(true);
-    clearError();
-    plotPlaceholder.classList.add('d-none');
+     clearError(); // Clear previous plot errors
+     // Only hide placeholder if we're about to *try* plotting
+     if (plotPlaceholder) plotPlaceholder.classList.add('d-none');
 
     const plotFunction = appState.currentPlotModule[`create${capitalize(appState.currentPlotType)}Plot`];
 
     if (plotFunction) {
-        requestAnimationFrame(() => { // Use rAF for smoother rendering before heavy JS
-            try {
-                const figure = plotFunction(appState.plotData, appState.plotConfig);
-                if (figure.error) throw new Error(figure.error);
+         requestAnimationFrame(() => {
+             try {
+                 // Call the specific plot function with CURRENT data and config
+                 const figure = plotFunction(appState.plotData, appState.plotConfig);
+                 if (figure.error) throw new Error(figure.error); // Handle errors returned by plot func
 
-                // Apply General Layout Enhancements (can be overridden by plot function)
-                const plotLayout = {
-                     margin: { l: 50, r: 50, t: 80, b: 50 }, // Generous default margins
-                    ...(figure.layout || {}), // Spread layout from plot function first
-                     font: { family: appState.plotConfig.fontFamily || 'Arial', size: 12, color: '#333' },
-                     paper_bgcolor: 'rgba(255,255,255,1)',
-                     plot_bgcolor: '#ffffff',
-                     autosize: true, // Let plotly manage size initially
+                // Define common layout properties to ensure consistency
+                 const commonLayout = {
+                    margin: { l: 50, r: 50, t: 80, b: 50 },
+                     font: { family: appState.plotConfig?.fontFamily || 'Arial', size: 12, color: '#333' },
+                    paper_bgcolor: 'rgba(255,255,255,1)',
+                    plot_bgcolor: '#ffffff', // White plot background
+                    autosize: true,
+                    // Standardize title styling if a title exists
+                    ...( (figure.layout?.title?.text || appState.plotConfig?.plotTitle) && {
+                         title: {
+                            text: figure.layout?.title?.text || appState.plotConfig?.plotTitle,
+                            font: {
+                                size: Math.max(14, (appState.plotConfig?.labelFontsize || 18) + 2),
+                                 family: appState.plotConfig?.fontFamily || 'Arial',
+                                weight: 'bold',
+                                color: '#1a5276'
+                             }
+                         }
+                    })
                 };
-                // Ensure title font settings are applied correctly
-                if (plotLayout.title?.text) { // Check if title text exists
-                     plotLayout.title.font = {
-                        size: Math.max(14, (appState.plotConfig.labelFontsize || 18) + 2), // Base title on axis label size + bit larger
-                        family: plotLayout.font.family,
-                         weight: 'bold',
-                         color: '#1a5276'
-                    };
-                }
+
+                // Merge plot-specific layout with common layout, specific taking precedence
+                 const finalLayout = { ...commonLayout, ...(figure.layout || {}) };
 
 
-                 const configPlotly = { responsive: true, displaylogo: false }; // Standard Plotly config
+                const configPlotly = { responsive: true, displaylogo: false };
 
-                if (!appState.plotlyInitialized || !document.getElementById('plot-output')?.hasChildNodes()) {
-                     Plotly.newPlot(plotOutput, figure.data, plotLayout, configPlotly);
-                    appState.plotlyInitialized = true;
+                if (!appState.plotlyInitialized || !plotOutput?.hasChildNodes()) {
+                    Plotly.newPlot(plotOutput, figure.data, finalLayout, configPlotly);
+                     appState.plotlyInitialized = true;
                  } else {
-                    Plotly.react(plotOutput, figure.data, plotLayout); // Efficient update
-                 }
-                 // Resize listener might be needed if container size changes *after* plot generation
-                 // Plotly.Plots.resize(plotOutput); might be needed in some resize scenarios
+                     Plotly.react(plotOutput, figure.data, finalLayout);
+                }
 
              } catch (error) {
                  console.error('Plotting Error:', error);
                 displayError(`Plot generation failed: ${error.message}`);
-                appState.plotlyInitialized = false;
+                appState.plotlyInitialized = false; // Ensure reset on failure
              } finally {
-                 setLoading(false);
+                setLoading(false);
              }
          });
      } else {
-         console.error("Plot function not found for type:", appState.currentPlotType);
+        console.error("Plot function not found for type:", appState.currentPlotType);
         displayError(`Internal error: Plot function missing.`);
-        setLoading(false);
-     }
-}
-
+         setLoading(false);
+    }
+ }
 
 function handleDownload(format) {
-     if (!appState.plotlyInitialized || !document.getElementById('plot-output')?.hasChildNodes()) {
+     if (!appState.plotlyInitialized || !plotOutput?.hasChildNodes()) {
         alert("Please generate a plot before downloading.");
         return;
      }
@@ -419,7 +510,7 @@ function handleDownload(format) {
     if (isNaN(dlWidth) || dlWidth <= 0) dlWidth = defaultWidth;
      if (isNaN(dlHeight) || dlHeight <= 0) dlHeight = defaultHeight;
 
-    const baseFilename = `${appState.currentPlotType}_plot_${new Date().toISOString().slice(0, 10).replace(/-/g,'')}`;
+     const baseFilename = `${appState.currentPlotType}_plot_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
 
     let downloadOptions = {
         format: '', width: dlWidth, height: dlHeight, filename: '', scale: scaleFactor
@@ -434,9 +525,7 @@ function handleDownload(format) {
     } else if (format === 'svg') {
         downloadOptions.format = 'svg';
         downloadOptions.filename = `${baseFilename}.svg`;
-        // Let Plotly handle SVG sizing; removing scale/width/height might be best for vector quality.
-        // Alternatively, provide width/height WITHOUT scale for viewBox setting. Test needed.
-         downloadOptions.scale = undefined;
+        downloadOptions.scale = undefined; // Let SVG scale naturally
     } else {
         console.error("Unsupported download format:", format);
         return;
@@ -449,30 +538,21 @@ function handleDownload(format) {
         .finally(() => { setLoading(false); });
 }
 
-function resetPlotArea() {
-    if(plotOutput) {
-       try {
-            Plotly.purge(plotOutput); // Remove Plotly instance safely
-        } catch(e) {
-             console.warn("Error purging Plotly:", e);
-        }
-        plotOutput.innerHTML = ''; // Clear residual elements
-    }
-    appState.plotlyInitialized = false;
-    plotPlaceholder?.classList.remove('d-none');
-    errorMessage?.classList.add('d-none');
-    errorMessage.textContent = ''; // Clear error text
-    setLoading(false); // Ensure loading indicator is off
 
-    // Reset app state related to plot
-    appState.plotData = null;
-    appState.plotHeader = [];
-    appState.plotConfig = {};
-    appState.currentPlotModule = null;
+function resetPlotArea() {
+    if (plotOutput) {
+       try {
+            Plotly.purge(plotOutput);
+        } catch (e) { /* ignore if no plot existed */ }
+        plotOutput.innerHTML = '';
+     }
+    appState.plotlyInitialized = false;
+     if(plotPlaceholder) plotPlaceholder.classList.remove('d-none');
+    if(errorMessage) errorMessage.classList.add('d-none');
+    setLoading(false); // Make sure loader is off
  }
 
+
 // --- Initial Setup ---
-plotGenerationSection.classList.add('d-none');
-plotSelectionSection.classList.remove('d-none');
-updateExampleLink(null); // Set initial example link text
+switchToSelectionView(); // Start by showing the selection screen
 console.log("BioPlot Interactive Initialized");
